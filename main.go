@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"time"
 )
 
 /*
@@ -18,34 +20,40 @@ What I do know so far:
     - Events older than 30 days will never be included.
     - For queries by user, the default params fetch a single page of 30 results.
         - 100 is the upper limit for per_page
-    - What you get back is an array of objects like this:
-        {
-            "id": "22249084964",
-            "type": "PushEvent",
-            "actor": {
-                "id": 583231,
-                "login": "octocat",
-                "display_login": "octocat",
-                "gravatar_id": "",
-                "url": "https://api.github.com/users/octocat",
-                "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4"
-            },
-            "repo": {
-                "id": 1296269,
-                "name": "octocat/Hello-World",
-                "url": "https://api.github.com/repos/octocat/Hello-World"
-            },
-            "payload": {
-                "repository_id": 1296269,
-                "push_id": 10115855396,
-                "ref": "refs/heads/master",
-                "head": "7a8f3ac80e2ad2f6842cb86f576d4bfe2c03e300",
-                "before": "883efe034920928c47fe18598c01249d1a9fdabd"
-            },
-            "public": true,
-            "created_at": "2022-06-09T12:47:28Z"
-        }
 */
+
+type Event struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	Actor     Actor     `json:"actor"`
+	Repo      Repo      `json:"repo"`
+	Payload   Payload   `json:"payload"`
+	Public    bool      `json:"public"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Actor struct {
+	ID           int    `json:"id"`
+	Login        string `json:"login"`
+	DisplayLogin string `json:"display_login"`
+	GravatarID   string `json:"gravatar_id"`
+	URL          string `json:"url"`
+	AvatarURL    string `json:"avatar_url"`
+}
+
+type Repo struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+type Payload struct {
+	RepositoryID int    `json:"repository_id"`
+	PushID       int64  `json:"push_id"`
+	Ref          string `json:"ref"`
+	Head         string `json:"head"`
+	Before       string `json:"before"`
+}
 
 func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
@@ -56,7 +64,6 @@ func main() {
 	user := args[0]
 
 	client := http.DefaultClient
-
 	endpoint := userEventsEndpoint(user)
 	fmt.Println("Endpoint:", endpoint)
 
@@ -74,6 +81,17 @@ func main() {
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading from body:", err)
+		return
+	}
 	fmt.Println("Response status:", resp.Status)
-	fmt.Printf("Response body:\n%s\n", body)
+
+	var events []Event
+	err = json.Unmarshal(body, &events)
+	if err != nil {
+		fmt.Println("Error parsing JSON:", err)
+		return
+	}
+	fmt.Printf("Events extracted!\n\n%v\n\n", events)
 }
