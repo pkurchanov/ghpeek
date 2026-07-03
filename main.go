@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,15 +57,16 @@ func makeGetRequest(endpoint string) *http.Request {
 	return req
 }
 
-func getResponse(req *http.Request) *http.Response {
+func getResponse(req *http.Request) (*http.Response, error) {
 	clt := http.DefaultClient
 	resp, err := clt.Do(req)
-	if err != nil {
-		fmt.Println("Error sending request", err)
-		return nil
+	if resp.StatusCode == 404 {
+		err = errors.New("no events found by the given username")
 	}
-	fmt.Println("Response status:", resp.Status)
-	return resp
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func getRawEvents(resp *http.Response) []byte {
@@ -95,7 +97,12 @@ func main() {
 	fmt.Println("Endpoint:", endpoint)
 
 	request := makeGetRequest(endpoint)
-	response := getResponse(request)
+	response, err := getResponse(request)
+	if err != nil {
+		fmt.Println("Error sending request:", err)
+		return
+	}
+
 	eventData := getRawEvents(response)
 	envelopes := parseEvents(eventData)
 	// Still yet to parse the payloads properly... or at all.
