@@ -85,39 +85,37 @@ func makeRequest(endpoint string) (*http.Request, error) {
 	return req, nil
 }
 
-// Sends a given request and saves the response.
-//
-// 404 in current usage strictly means there's no such user
-// (see userEventsEndpoint).
-func getResponse(req *http.Request) (*http.Response, error) {
+// Goes from the above-formed request to medium-raw data.
+func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 	resp, err := http.DefaultClient.Do(req)
-	if resp.StatusCode == 404 {
-		err = errors.New("no events found by the given username")
-	}
 	if err != nil {
 		return nil, err
 	}
-	return resp, nil
-}
+	if resp.StatusCode == 404 {
+		// We can be reasonably sure that this is what 404 means (see userEventsEndpoint).
+		return nil, errors.New("no user found by the given name.")
+	}
 
-// Assumes the argument to be JSON-encoded GitHub events.
-// Then parses them except for the payloads.
-func extractEventEnvelopes(resp *http.Response) []EventEnvelope {
+	// Caching coming Soon™️
+	fmt.Println(resp.Header.Get("etag"))
+
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Error reading event data:", err)
-		return nil
+		return nil, err
 	}
 	var envs []EventEnvelope
 	if err := json.Unmarshal(data, &envs); err != nil {
 		fmt.Println("Error parsing event data:", err)
-		return nil
+		return nil, err
 	}
-	return envs
+	return envs, nil
 }
 
-// Now this is where the payloads are parsed on demand.
+// Inspects a given event envelope and generates a type-appropriate report.
+//
+// In the future it might be nice to have an intermediate consolidation step.
 func makeEventReport(env EventEnvelope) (string, error) {
 	switch env.Type {
 	case "PushEvent":
@@ -140,13 +138,7 @@ func makeEventReport(env EventEnvelope) (string, error) {
 			return "", err
 		}
 
-		un := ""
-		if payload.Action != "started" {
-			// Not really implemented in the API...
-			// But doesn't really hurt to have, right?
-			un = "un"
-		}
-		return fmt.Sprintf("Repo %s"+"starred: %s", un, env.Repo.Name), nil
+		return fmt.Sprintf("Starred %s", env.Repo.Name), nil
 	case "IssueCommentEvent":
 		var payload IssueCommentPayload
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
@@ -165,27 +157,31 @@ func makeEventReport(env EventEnvelope) (string, error) {
 
 func main() {
 	args := os.Args[1:]
-	user := args[0]
-
-	endpoint := userEventsEndpoint(user)
-	request, err := makeRequest(endpoint)
-	if err != nil {
-		fmt.Println("Error forming request:", err)
+	if len(args) < 1 {
+		fmt.Println("Usage: ghpeek <username>")
 		return
-	}
-	response, err := getResponse(request)
-	if err != nil {
-		fmt.Println("Error sending request:", err)
-		return
-	}
-	envelopes := extractEventEnvelopes(response)
+	} else {
+		user := args[0]
 
-	for _, env := range envelopes {
-		fmt.Printf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
-		eventReport, err := makeEventReport(env)
+		endpoint := userEventsEndpoint(user)
+		request, err := makeRequest(endpoint)
 		if err != nil {
-			fmt.Println("Error parsing event payload:", err)
+			fmt.Println("Error forming request:", err)
+			return
 		}
-		fmt.Println(eventReport)
+		envelopes, err := extractEventData(request)
+		if err != nil {
+			fmt.Println("Error extracting data:", err)
+			return
+		}
+
+		for _, env := range envelopes {
+			fmt.Printf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
+			eventReport, err := makeEventReport(env)
+			if err != nil {
+				fmt.Println("Error parsing event payload:", err)
+			}
+			fmt.Println(eventReport)
+		}
 	}
 }
