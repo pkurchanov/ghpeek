@@ -111,19 +111,27 @@ func makeEventReport(env EventEnvelope) (string, error) {
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Commit(s) pushed: %v", payload), nil
+		return fmt.Sprintf("Commit(s) pushed to %v", env.Repo.Name), nil
 	case "CreateEvent":
 		var payload CreatePayload
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Branch or tag created: %v", payload), nil
+		return fmt.Sprintf("A %s created on %v", payload.RefType, env.Repo.Name), nil
 	case "WatchEvent":
 		var payload WatchPayload
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Repo [un]starred: %v", payload), nil
+		var un string
+		if payload.Action == "started" {
+			un = ""
+		} else {
+			// Not really implemented in the API...
+			// But doesn't really hurt to have, right?
+			un = "un"
+		}
+		return fmt.Sprintf("Repo %s"+"starred: %v", un, env.Repo.Name), nil
 	default:
 		return fmt.Sprintf("Event type not yet implemented: %v", env.Type), nil
 	}
@@ -146,8 +154,8 @@ func main() {
 	}
 	envelopes := extractEventEnvelopes(response)
 
-	for idx, env := range envelopes {
-		fmt.Printf("\nEvent #%d, %v\n", idx+1, env.CreatedAt)
+	for _, env := range envelopes {
+		fmt.Printf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
 		eventReport, err := makeEventReport(env)
 		if err != nil {
 			fmt.Println("Error parsing event payload:", err)
