@@ -11,13 +11,13 @@ import (
 )
 
 type EventEnvelope struct {
-	ID        string          `json:"id"`
-	Type      string          `json:"type"`
-	Actor     Actor           `json:"actor"`
-	Repo      Repo            `json:"repo"`
-	Public    bool            `json:"public"`
-	CreatedAt time.Time       `json:"created_at"`
-	Payload   json.RawMessage `json:"payload"`
+	ID         string          `json:"id"`
+	Type       string          `json:"type"`
+	Actor      Actor           `json:"actor"`
+	Repo       Repo            `json:"repo"`
+	Public     bool            `json:"public"`
+	CreatedAt  time.Time       `json:"created_at"`
+	RawPayload json.RawMessage `json:"payload"`
 }
 
 type Actor struct {
@@ -119,32 +119,30 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 func makeEventReport(env EventEnvelope) (string, error) {
 	switch env.Type {
 	case "PushEvent":
+		// Generics have been attempted but they really don't seem to reduce clutter at all.
+		// Maybe an interface will do the trick. Later.
 		var payload PushPayload
-		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-
 		return fmt.Sprintf("Commit(s) pushed to %s", env.Repo.Name), nil
 	case "CreateEvent":
 		var payload CreatePayload
-		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-
 		return fmt.Sprintf("A %s created on %s", payload.RefType, env.Repo.Name), nil
 	case "WatchEvent":
 		var payload WatchPayload
-		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-
 		return fmt.Sprintf("Starred %s", env.Repo.Name), nil
 	case "IssueCommentEvent":
 		var payload IssueCommentPayload
-		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-
 		return fmt.Sprintf("Comment %s on issue #%d in %s:\n\"%s\"",
 			payload.Action,
 			payload.Issue.Number,
