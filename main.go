@@ -47,19 +47,19 @@ func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
 }
 
-func makeGetRequest(endpoint string) *http.Request {
+// Construct a GET request expecting JSON back.
+func makeRequest(endpoint string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", endpoint, nil)
-	if err != nil {
-		fmt.Println("Error forming request:", err)
-		return nil
-	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	return req
+	if err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
+// Send a given request and save the response.
 func getResponse(req *http.Request) (*http.Response, error) {
-	clt := http.DefaultClient
-	resp, err := clt.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if resp.StatusCode == 404 {
 		err = errors.New("no events found by the given username")
 	}
@@ -69,17 +69,14 @@ func getResponse(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func getRawEvents(resp *http.Response) []byte {
+// Assume the argument to be JSON-encoded GitHub events and parse them except for the payloads.
+func extractEventEnvelopes(resp *http.Response) []EventEnvelope {
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Error reading event data:", err)
 		return nil
 	}
-	return data
-}
-
-func parseEvents(data []byte) []EventEnvelope {
 	var envs []EventEnvelope
 	if err := json.Unmarshal(data, &envs); err != nil {
 		fmt.Println("Error parsing event data:", err)
@@ -94,21 +91,28 @@ func main() {
 	user := args[0]
 
 	endpoint := userEventsEndpoint(user)
-	fmt.Println("Endpoint:", endpoint)
-
-	request := makeGetRequest(endpoint)
+	request, err := makeRequest(endpoint)
+	if err != nil {
+		fmt.Println("Error forming request:", err)
+		return
+	}
 	response, err := getResponse(request)
 	if err != nil {
 		fmt.Println("Error sending request:", err)
 		return
 	}
+	envelopes := extractEventEnvelopes(response)
 
-	eventData := getRawEvents(response)
-	envelopes := parseEvents(eventData)
-	// Still yet to parse the payloads properly... or at all.
-	// But at least I'm no longer losing data that doesn't fit push events.
-
-	for idx, event := range envelopes {
-		fmt.Print("#", idx+1, "\n", event, "\n")
+	for idx, env := range envelopes {
+		fmt.Printf("Event #%d:\n", idx+1)
+		switch env.Type {
+		case "PushEvent":
+			var payload PushPayload
+			if err := json.Unmarshal(env.Payload, &payload); err != nil {
+				fmt.Println("Error parsing push event:", err)
+				return
+			}
+			fmt.Println(payload)
+		}
 	}
 }
