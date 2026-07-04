@@ -52,6 +52,10 @@ type CreatePayload struct {
 	PusherType   string `json:"pusher_type"`
 }
 
+type WatchPayload struct {
+	Action string `json:"action"`
+}
+
 func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
 }
@@ -96,7 +100,6 @@ func extractEventEnvelopes(resp *http.Response) []EventEnvelope {
 		fmt.Println("Error parsing event data:", err)
 		return nil
 	}
-	fmt.Println("Events extracted!")
 	return envs
 }
 
@@ -108,13 +111,19 @@ func makeEventReport(env EventEnvelope) (string, error) {
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Push event: %v", payload), nil
+		return fmt.Sprintf("Commit(s) pushed: %v", payload), nil
 	case "CreateEvent":
 		var payload CreatePayload
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Create event: %v", payload), nil
+		return fmt.Sprintf("Branch or tag created: %v", payload), nil
+	case "WatchEvent":
+		var payload WatchPayload
+		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Repo [un]starred: %v", payload), nil
 	default:
 		return fmt.Sprintf("Event type not yet implemented: %v", env.Type), nil
 	}
@@ -138,7 +147,7 @@ func main() {
 	envelopes := extractEventEnvelopes(response)
 
 	for idx, env := range envelopes {
-		fmt.Printf("Event #%d\n", idx+1)
+		fmt.Printf("\nEvent #%d, %v\n", idx+1, env.CreatedAt)
 		eventReport, err := makeEventReport(env)
 		if err != nil {
 			fmt.Println("Error parsing event payload:", err)
