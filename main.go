@@ -56,6 +56,20 @@ type WatchPayload struct {
 	Action string `json:"action"`
 }
 
+type IssueCommentPayload struct {
+	Action  string  `json:"action"`
+	Issue   Issue   `json:"issue"`
+	Comment Comment `json:"comment"`
+}
+
+type Issue struct {
+	Number int `json:"number"`
+}
+
+type Comment struct {
+	Body string `json:"body"`
+}
+
 func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
 }
@@ -111,29 +125,41 @@ func makeEventReport(env EventEnvelope) (string, error) {
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Commit(s) pushed to %v", env.Repo.Name), nil
+
+		return fmt.Sprintf("Commit(s) pushed to %s", env.Repo.Name), nil
 	case "CreateEvent":
 		var payload CreatePayload
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("A %s created on %v", payload.RefType, env.Repo.Name), nil
+
+		return fmt.Sprintf("A %s created on %s", payload.RefType, env.Repo.Name), nil
 	case "WatchEvent":
 		var payload WatchPayload
 		if err := json.Unmarshal(env.Payload, &payload); err != nil {
 			return "", err
 		}
-		var un string
-		if payload.Action == "started" {
-			un = ""
-		} else {
+
+		un := ""
+		if payload.Action != "started" {
 			// Not really implemented in the API...
 			// But doesn't really hurt to have, right?
 			un = "un"
 		}
-		return fmt.Sprintf("Repo %s"+"starred: %v", un, env.Repo.Name), nil
+		return fmt.Sprintf("Repo %s"+"starred: %s", un, env.Repo.Name), nil
+	case "IssueCommentEvent":
+		var payload IssueCommentPayload
+		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+			return "", err
+		}
+
+		return fmt.Sprintf("Comment %s on issue #%d in %s:\n\"%s\"",
+			payload.Action,
+			payload.Issue.Number,
+			env.Repo.Name,
+			payload.Comment.Body), nil
 	default:
-		return fmt.Sprintf("Event type not yet implemented: %v", env.Type), nil
+		return fmt.Sprintf("Event type not yet implemented: %s", env.Type), nil
 	}
 }
 
