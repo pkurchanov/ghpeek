@@ -43,11 +43,21 @@ type PushPayload struct {
 	Before       string `json:"before"`
 }
 
+type CreatePayload struct {
+	Ref          string `json:"ref"`
+	RefType      string `json:"ref_type"`
+	FullRef      string `json:"full_ref"`
+	MasterBranch string `json:"master_branch"`
+	Description  string `json:"description"`
+	PusherType   string `json:"pusher_type"`
+}
+
 func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
 }
 
-// Construct a GET request expecting JSON back.
+// Constructs a GET request for the given endpoint.
+// The response is expected to be in GitHub-specified JSON.
 func makeRequest(endpoint string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", endpoint, nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -57,7 +67,10 @@ func makeRequest(endpoint string) (*http.Request, error) {
 	return req, nil
 }
 
-// Send a given request and save the response.
+// Sends a given request and saves the response.
+//
+// 404 in current usage strictly means there's no such user
+// (see userEventsEndpoint).
 func getResponse(req *http.Request) (*http.Response, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if resp.StatusCode == 404 {
@@ -69,7 +82,8 @@ func getResponse(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// Assume the argument to be JSON-encoded GitHub events and parse them except for the payloads.
+// Assumes the argument to be JSON-encoded GitHub events.
+// Then parses them except for the payloads.
 func extractEventEnvelopes(resp *http.Response) []EventEnvelope {
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
@@ -105,14 +119,24 @@ func main() {
 
 	for idx, env := range envelopes {
 		fmt.Printf("Event #%d:\n", idx+1)
+		// This whole thing could be a function, I think
 		switch env.Type {
 		case "PushEvent":
 			var payload PushPayload
 			if err := json.Unmarshal(env.Payload, &payload); err != nil {
-				fmt.Println("Error parsing push event:", err)
+				fmt.Println("Error parsing a push event:", err)
 				return
 			}
 			fmt.Println(payload)
+		case "CreateEvent":
+			var payload CreatePayload
+			if err := json.Unmarshal(env.Payload, &payload); err != nil {
+				fmt.Println("Error parsing a create event:", err)
+				return
+			}
+			fmt.Println(payload)
+		default:
+			fmt.Println("Event type not yet implemented:", env.Type)
 		}
 	}
 }
