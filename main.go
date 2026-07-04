@@ -57,7 +57,7 @@ func userEventsEndpoint(username string) string {
 }
 
 // Constructs a GET request for the given endpoint.
-// The response is expected to be in GitHub-specified JSON.
+// Politely asks the server to spit JSON back.
 func makeRequest(endpoint string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", endpoint, nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -100,6 +100,26 @@ func extractEventEnvelopes(resp *http.Response) []EventEnvelope {
 	return envs
 }
 
+// Now this is where the payloads are parsed on demand.
+func makeEventReport(env EventEnvelope) (string, error) {
+	switch env.Type {
+	case "PushEvent":
+		var payload PushPayload
+		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Push event: %v", payload), nil
+	case "CreateEvent":
+		var payload CreatePayload
+		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Create event: %v", payload), nil
+	default:
+		return fmt.Sprintf("Event type not yet implemented: %v", env.Type), nil
+	}
+}
+
 func main() {
 	args := os.Args[1:]
 	user := args[0]
@@ -118,25 +138,11 @@ func main() {
 	envelopes := extractEventEnvelopes(response)
 
 	for idx, env := range envelopes {
-		fmt.Printf("Event #%d:\n", idx+1)
-		// This whole thing could be a function, I think
-		switch env.Type {
-		case "PushEvent":
-			var payload PushPayload
-			if err := json.Unmarshal(env.Payload, &payload); err != nil {
-				fmt.Println("Error parsing a push event:", err)
-				return
-			}
-			fmt.Println(payload)
-		case "CreateEvent":
-			var payload CreatePayload
-			if err := json.Unmarshal(env.Payload, &payload); err != nil {
-				fmt.Println("Error parsing a create event:", err)
-				return
-			}
-			fmt.Println(payload)
-		default:
-			fmt.Println("Event type not yet implemented:", env.Type)
+		fmt.Printf("Event #%d\n", idx+1)
+		eventReport, err := makeEventReport(env)
+		if err != nil {
+			fmt.Println("Error parsing event payload:", err)
 		}
+		fmt.Println(eventReport)
 	}
 }
