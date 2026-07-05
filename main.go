@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -79,8 +81,16 @@ func (p IssueCommentPayload) Format(env EventEnvelope) string {
 	if p.Issue.PullRequest != (PR{}) {
 		issueType = "PR"
 	}
-	return fmt.Sprintf("Comment %s on %s #%d in %s:\n\"%s\"",
-		p.Action, issueType, p.Issue.Number, env.Repo.Name, p.Comment.Body)
+	return fmt.Sprintf("%s a comment on %s #%d in %s:\n%s",
+		asciiLowerToTitle(p.Action), issueType, p.Issue.Number, env.Repo.Name, quote(p.Comment.Body))
+}
+
+func quote(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = "  > " + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 type Issue struct {
@@ -179,6 +189,9 @@ func parsePayload(env *EventEnvelope) error {
 	return nil
 }
 
+// Modeling a contiguous block of events of exactly the same kind.
+type EventGroup map[string]int
+
 // `strings.Title` is deprecated.
 // `cases` is a whole external module.
 // This will have to do for my current use case.
@@ -211,7 +224,7 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 	}
 
 	// Caching coming Soon™️
-	fmt.Println(resp.Header.Get("etag"))
+	// etag := resp.Header.Get("etag")
 
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
@@ -234,12 +247,12 @@ func makeEventReport(env EventEnvelope) (string, error) {
 	if err := parsePayload(&env); err != nil {
 		return "", err
 	}
-	report := fmt.Sprintf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
+	var report string
 	if env.ParsedPayload == nil {
-		report += fmt.Sprintf("Event type not yet implemented: %s", env.Type)
+		report = fmt.Sprintf("Event type not yet implemented: %s", env.Type)
 		return report, nil
 	}
-	report += env.ParsedPayload.Format(env)
+	report = env.ParsedPayload.Format(env)
 	return report, nil
 }
 
@@ -262,14 +275,59 @@ func main() {
 			fmt.Println("Error extracting data:", err)
 			return
 		}
-		slices.Reverse(envelopes) // Latest events at the bottom.
+		// Latest events at the bottom.
+		slices.SortFunc(envelopes, func(a, b EventEnvelope) int { return a.CreatedAt.Compare(b.CreatedAt) })
 
+		var lastReport string
+		eventGroup := make(EventGroup)
+		lastDate := ""
 		for _, env := range envelopes {
-			eventReport, err := makeEventReport(env)
+			newDate := env.CreatedAt.Format(time.DateOnly)
+			if newDate != lastDate {
+				// Stop groups from migrating across day boundaries.
+				if lastReport != "" {
+					count := eventGroup[lastReport]
+					countLabel := ""
+					if count > 1 {
+						countLabel = "x" + strconv.Itoa(count)
+					}
+					fmt.Println("-", lastReport, countLabel)
+				}
+				fmt.Printf("\n  %s\n", newDate)
+				lastDate = newDate
+			}
+
+			newReport, err := makeEventReport(env)
 			if err != nil {
 				fmt.Println("Error parsing event payload:", err)
 			}
-			fmt.Println(eventReport)
+			if lastReport != newReport {
+				countLabel := ""
+				count := eventGroup[lastReport]
+				if count != 1 {
+					countLabel = "x" + strconv.Itoa(count)
+				}
+				if lastReport != "" {
+					fmt.Println("-", lastReport, countLabel)
+				}
+
+				lastReport = newReport
+				eventGroup[newReport] = 1
+			} else {
+				_, ok := eventGroup[newReport]
+				if ok {
+					eventGroup[newReport] += 1
+				}
+			}
+		}
+		// Keep the last group from evaporating.
+		if lastReport != "" {
+			count := eventGroup[lastReport]
+			countLabel := ""
+			if count > 1 {
+				countLabel = "x" + strconv.Itoa(count)
+			}
+			fmt.Println("-", lastReport, countLabel)
 		}
 	}
 }
