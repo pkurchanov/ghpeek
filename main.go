@@ -12,13 +12,18 @@ import (
 )
 
 type EventEnvelope struct {
-	ID         string          `json:"id"`
-	Type       string          `json:"type"`
-	Actor      User            `json:"actor"`
-	Repo       Repo            `json:"repo"`
-	Public     bool            `json:"public"`
-	CreatedAt  time.Time       `json:"created_at"`
-	RawPayload json.RawMessage `json:"payload"`
+	ID            string          `json:"id"`
+	Type          string          `json:"type"`
+	Actor         User            `json:"actor"`
+	Repo          Repo            `json:"repo"`
+	Public        bool            `json:"public"`
+	CreatedAt     time.Time       `json:"created_at"`
+	RawPayload    json.RawMessage `json:"payload"`
+	ParsedPayload EventFormatter
+}
+
+type EventFormatter interface {
+	Format(env EventEnvelope) string
 }
 
 type User struct {
@@ -40,18 +45,42 @@ type PushPayload struct {
 	// No fields needed so far.
 }
 
+func (p PushPayload) Format(env EventEnvelope) string {
+	return fmt.Sprintf("Pushed to %s", env.Repo.Name)
+}
+
 type CreatePayload struct {
 	RefType string `json:"ref_type"`
+}
+
+func (p CreatePayload) Format(env EventEnvelope) string {
+	return fmt.Sprintf("A %s created on %s", p.RefType, env.Repo.Name)
 }
 
 type WatchPayload struct {
 	Action string `json:"action"`
 }
 
+func (p WatchPayload) Format(env EventEnvelope) string {
+	return fmt.Sprintf("Starred %s", env.Repo.Name)
+}
+
 type IssueCommentPayload struct {
 	Action  string  `json:"action"`
 	Issue   Issue   `json:"issue"`
 	Comment Comment `json:"comment"`
+}
+
+func (p IssueCommentPayload) Format(env EventEnvelope) string {
+	issueType := "issue"
+	// Empty struct here would mean that there was nothing
+	// under the pull_request key, confirming that
+	// the issue in question is, in fact, an issue.
+	if p.Issue.PullRequest != (PR{}) {
+		issueType = "PR"
+	}
+	return fmt.Sprintf("Comment %s on %s #%d in %s:\n\"%s\"",
+		p.Action, issueType, p.Issue.Number, env.Repo.Name, p.Comment.Body)
 }
 
 type Issue struct {
@@ -74,8 +103,80 @@ type PullRequestPayload struct {
 	Label    Label  `json:"label,omitempty"`
 }
 
+func (p PullRequestPayload) Format(env EventEnvelope) string {
+	action := p.Action
+	switch action {
+	case "assigned":
+		return fmt.Sprintf("%s %s to PR #%d on %s",
+			asciiLowerToTitle(action),
+			p.Assignee.DisplayLogin,
+			p.Number,
+			env.Repo.Name,
+		)
+	case "unassigned":
+		return fmt.Sprintf("%s %s from PR #%d on %s",
+			asciiLowerToTitle(action),
+			p.Assignee.DisplayLogin,
+			p.Number,
+			env.Repo.Name,
+		)
+	case "labeled":
+		fallthrough
+	case "unlabeled":
+		return fmt.Sprintf("%s PR #%d as '%s' on %s",
+			asciiLowerToTitle(action),
+			p.Number,
+			p.Label.Name,
+			env.Repo.Name,
+		)
+	default:
+		return fmt.Sprintf("%s PR #%d on %s",
+			asciiLowerToTitle(action),
+			p.Number,
+			env.Repo.Name)
+	}
+}
+
 type Label struct {
 	Name string `json:"name"`
+}
+
+func parsePayload(env *EventEnvelope) error {
+	switch env.Type {
+	case "PushEvent":
+		var p PushPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "CreateEvent":
+		var p CreatePayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "WatchEvent":
+		var p WatchPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "IssueCommentEvent":
+		var p IssueCommentPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "PullRequestEvent":
+		var p PullRequestPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	default:
+		env.ParsedPayload = nil
+	}
+	return nil
 }
 
 // `strings.Title` is deprecated.
@@ -89,8 +190,6 @@ func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
 }
 
-// Constructs a GET request for the given endpoint.
-// Politely asks the server to spit JSON back.
 func makeRequest(endpoint string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", endpoint, nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -100,7 +199,7 @@ func makeRequest(endpoint string) (*http.Request, error) {
 	return req, nil
 }
 
-// Goes from the above-formed request to medium-rare data.
+// Gets us as far as medium-rare envelopes.
 func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -132,93 +231,15 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 //
 // In the future it might be nice to have an intermediate consolidation step.
 func makeEventReport(env EventEnvelope) (string, error) {
-	report := fmt.Sprintf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
-	switch env.Type {
-	case "PushEvent":
-		// Generics have been attempted but they really don't seem to reduce clutter at all.
-		// Maybe an interface will do the trick. Later.
-		var payload PushPayload
-		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
-			return "", err
-		}
-		report += fmt.Sprintf("Pushed to %s", env.Repo.Name)
-	case "CreateEvent":
-		var payload CreatePayload
-		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
-			return "", err
-		}
-		report += fmt.Sprintf("A %s created on %s", payload.RefType, env.Repo.Name)
-	case "WatchEvent":
-		var payload WatchPayload
-		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
-			return "", err
-		}
-		report += fmt.Sprintf("Starred %s", env.Repo.Name)
-	case "IssueCommentEvent":
-		var payload IssueCommentPayload
-		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
-			return "", err
-		}
-		issueType := "issue"
-		// Empty struct here would mean that there was nothing
-		// under the pull_request key, confirming that
-		// the issue in question is, in fact, an issue.
-		if payload.Issue.PullRequest != (PR{}) {
-			issueType = "PR"
-		}
-		report += fmt.Sprintf("Comment %s on %s #%d in %s:\n\"%s\"",
-			payload.Action,
-			issueType,
-			payload.Issue.Number,
-			env.Repo.Name,
-			payload.Comment.Body)
-	case "PullRequestEvent":
-		var payload PullRequestPayload
-		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
-			return "", err
-		}
-		var toAdd string
-		action := payload.Action
-		switch action {
-		case "opened":
-			fallthrough
-		case "reopened":
-			fallthrough
-		case "closed":
-			fallthrough
-		case "merged":
-			toAdd = fmt.Sprintf("%s PR #%d on %s",
-				asciiLowerToTitle(action),
-				payload.Number,
-				env.Repo.Name)
-		case "assigned":
-			toAdd = fmt.Sprintf("%s %s to PR #%d on %s",
-				asciiLowerToTitle(action),
-				payload.Assignee.DisplayLogin,
-				payload.Number,
-				env.Repo.Name,
-			)
-		case "unassigned":
-			toAdd = fmt.Sprintf("%s %s from PR #%d on %s",
-				asciiLowerToTitle(action),
-				payload.Assignee.DisplayLogin,
-				payload.Number,
-				env.Repo.Name,
-			)
-		case "labeled":
-			fallthrough
-		case "unlabeled":
-			toAdd = fmt.Sprintf("%s PR #%d as '%s' on %s",
-				asciiLowerToTitle(action),
-				payload.Number,
-				payload.Label.Name,
-				env.Repo.Name,
-			)
-		}
-		report += toAdd
-	default:
-		report += fmt.Sprintf("Event type not yet implemented: %s", env.Type)
+	if err := parsePayload(&env); err != nil {
+		return "", err
 	}
+	report := fmt.Sprintf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
+	if env.ParsedPayload == nil {
+		report += fmt.Sprintf("Event type not yet implemented: %s", env.Type)
+		return report, nil
+	}
+	report += env.ParsedPayload.Format(env)
 	return report, nil
 }
 
