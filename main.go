@@ -256,6 +256,60 @@ func makeEventReport(env EventEnvelope) (string, error) {
 	return report, nil
 }
 
+func display(rep string, eg EventGroup) {
+	count := eg[rep]
+	countLabel := ""
+	if count > 1 {
+		countLabel = "x" + strconv.Itoa(count)
+	}
+	fmt.Println("-", rep, countLabel)
+}
+
+func displayAll(envs []EventEnvelope) {
+	var lastReport string
+	eventGroup := make(EventGroup)
+	lastDate := ""
+	for _, env := range envs {
+		newDate := env.CreatedAt.Format(time.DateOnly)
+		if newDate != lastDate {
+			// Stop groups from migrating across day boundaries.
+			if lastReport != "" {
+				display(lastReport, eventGroup)
+			}
+
+			fmt.Printf("\n  %s\n", newDate)
+			lastDate = newDate
+		}
+
+		newReport, err := makeEventReport(env)
+		if err != nil {
+			fmt.Println("Error parsing event payload:", err)
+		}
+		if lastReport != newReport {
+			countLabel := ""
+			count := eventGroup[lastReport]
+			if count != 1 {
+				countLabel = "x" + strconv.Itoa(count)
+			}
+			if lastReport != "" {
+				fmt.Println("-", lastReport, countLabel)
+			}
+
+			lastReport = newReport
+			eventGroup[newReport] = 1
+		} else {
+			_, ok := eventGroup[newReport]
+			if ok {
+				eventGroup[newReport] += 1
+			}
+		}
+	}
+	// Keep the last group from evaporating.
+	if lastReport != "" {
+		display(lastReport, eventGroup)
+	}
+}
+
 func main() {
 	args := os.Args[1:]
 	if len(args) < 1 {
@@ -278,56 +332,6 @@ func main() {
 		// Latest events at the bottom.
 		slices.SortFunc(envelopes, func(a, b EventEnvelope) int { return a.CreatedAt.Compare(b.CreatedAt) })
 
-		var lastReport string
-		eventGroup := make(EventGroup)
-		lastDate := ""
-		for _, env := range envelopes {
-			newDate := env.CreatedAt.Format(time.DateOnly)
-			if newDate != lastDate {
-				// Stop groups from migrating across day boundaries.
-				if lastReport != "" {
-					count := eventGroup[lastReport]
-					countLabel := ""
-					if count > 1 {
-						countLabel = "x" + strconv.Itoa(count)
-					}
-					fmt.Println("-", lastReport, countLabel)
-				}
-				fmt.Printf("\n  %s\n", newDate)
-				lastDate = newDate
-			}
-
-			newReport, err := makeEventReport(env)
-			if err != nil {
-				fmt.Println("Error parsing event payload:", err)
-			}
-			if lastReport != newReport {
-				countLabel := ""
-				count := eventGroup[lastReport]
-				if count != 1 {
-					countLabel = "x" + strconv.Itoa(count)
-				}
-				if lastReport != "" {
-					fmt.Println("-", lastReport, countLabel)
-				}
-
-				lastReport = newReport
-				eventGroup[newReport] = 1
-			} else {
-				_, ok := eventGroup[newReport]
-				if ok {
-					eventGroup[newReport] += 1
-				}
-			}
-		}
-		// Keep the last group from evaporating.
-		if lastReport != "" {
-			count := eventGroup[lastReport]
-			countLabel := ""
-			if count > 1 {
-				countLabel = "x" + strconv.Itoa(count)
-			}
-			fmt.Println("-", lastReport, countLabel)
-		}
+		displayAll(envelopes)
 	}
 }
