@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"time"
 )
 
@@ -117,6 +118,7 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 //
 // In the future it might be nice to have an intermediate consolidation step.
 func makeEventReport(env EventEnvelope) (string, error) {
+	report := fmt.Sprintf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
 	switch env.Type {
 	case "PushEvent":
 		// Generics have been attempted but they really don't seem to reduce clutter at all.
@@ -125,32 +127,33 @@ func makeEventReport(env EventEnvelope) (string, error) {
 		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Commit(s) pushed to %s", env.Repo.Name), nil
+		report += fmt.Sprintf("Pushed to %s", env.Repo.Name)
 	case "CreateEvent":
 		var payload CreatePayload
 		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("A %s created on %s", payload.RefType, env.Repo.Name), nil
+		report += fmt.Sprintf("A %s created on %s", payload.RefType, env.Repo.Name)
 	case "WatchEvent":
 		var payload WatchPayload
 		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Starred %s", env.Repo.Name), nil
+		report += fmt.Sprintf("Starred %s", env.Repo.Name)
 	case "IssueCommentEvent":
 		var payload IssueCommentPayload
 		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Comment %s on issue #%d in %s:\n\"%s\"",
+		report += fmt.Sprintf("Comment %s on issue #%d in %s:\n\"%s\"",
 			payload.Action,
 			payload.Issue.Number,
 			env.Repo.Name,
-			payload.Comment.Body), nil
+			payload.Comment.Body)
 	default:
-		return fmt.Sprintf("Event type not yet implemented: %s", env.Type), nil
+		report += fmt.Sprintf("Event type not yet implemented: %s", env.Type)
 	}
+	return report, nil
 }
 
 func main() {
@@ -172,9 +175,9 @@ func main() {
 			fmt.Println("Error extracting data:", err)
 			return
 		}
+		slices.Reverse(envelopes) // Latest events at the bottom.
 
 		for _, env := range envelopes {
-			fmt.Printf("\n%s\n", env.CreatedAt.Format(time.RFC1123))
 			eventReport, err := makeEventReport(env)
 			if err != nil {
 				fmt.Println("Error parsing event payload:", err)
