@@ -222,6 +222,9 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 		// We can be reasonably sure that this is what 404 means (see userEventsEndpoint).
 		return nil, errors.New("no user found by the given name.")
 	}
+	if resp.StatusCode == 503 {
+		return nil, errors.New("service unavailable. Try again in a few minutes.")
+	}
 
 	// Caching coming Soon™️
 	// etag := resp.Header.Get("etag")
@@ -273,8 +276,8 @@ func displayAll(envs []EventEnvelope) {
 	lastDate := ""
 	for _, env := range envs {
 		newDate := env.CreatedAt.Format(time.DateOnly)
+		// Stop groups from migrating across day boundaries.
 		if newDate != lastDate {
-			// Stop groups from migrating across day boundaries.
 			display(lastReport, eventGroup)
 			fmt.Printf("\n  %s\n", newDate)
 			lastDate = newDate
@@ -305,7 +308,6 @@ func main() {
 		return
 	} else {
 		user := args[0]
-
 		endpoint := userEventsEndpoint(user)
 		request, err := makeRequest(endpoint)
 		if err != nil {
@@ -317,9 +319,12 @@ func main() {
 			fmt.Println("Error extracting data:", err)
 			return
 		}
-		// Latest events at the bottom.
-		slices.SortFunc(envelopes, func(a, b EventEnvelope) int { return a.CreatedAt.Compare(b.CreatedAt) })
-
+		// Push latest events to the bottom.
+		slices.SortFunc(
+			envelopes,
+			func(a, b EventEnvelope) int {
+				return a.CreatedAt.Compare(b.CreatedAt)
+			})
 		displayAll(envelopes)
 	}
 }

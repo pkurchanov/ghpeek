@@ -10,6 +10,6 @@ go build .
 A system-appropriate `ghpeek` executable should spawn right beside you.
 ## Usage
 ```bash
-ghpeek <username>
+./ghpeek <username>
 ```
 If there's such a user on GitHub, magic should happen.
