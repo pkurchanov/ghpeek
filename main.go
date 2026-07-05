@@ -312,7 +312,7 @@ func displayAll(envs []EventEnvelope) {
 
 func main() {
 	args := os.Args[1:]
-	if len(args) < 1 {
+	if len(args) != 1 {
 		fmt.Println("Usage: ghpeek <username>")
 		return
 	} else {
