@@ -257,12 +257,14 @@ func makeEventReport(env EventEnvelope) (string, error) {
 }
 
 func display(rep string, eg EventGroup) {
-	count := eg[rep]
-	countLabel := ""
-	if count > 1 {
-		countLabel = "x" + strconv.Itoa(count)
+	if rep != "" {
+		count := eg[rep]
+		countLabel := ""
+		if count > 1 {
+			countLabel = "x" + strconv.Itoa(count)
+		}
+		fmt.Println("-", rep, countLabel)
 	}
-	fmt.Println("-", rep, countLabel)
 }
 
 func displayAll(envs []EventEnvelope) {
@@ -273,28 +275,16 @@ func displayAll(envs []EventEnvelope) {
 		newDate := env.CreatedAt.Format(time.DateOnly)
 		if newDate != lastDate {
 			// Stop groups from migrating across day boundaries.
-			if lastReport != "" {
-				display(lastReport, eventGroup)
-			}
-
+			display(lastReport, eventGroup)
 			fmt.Printf("\n  %s\n", newDate)
 			lastDate = newDate
 		}
-
 		newReport, err := makeEventReport(env)
 		if err != nil {
 			fmt.Println("Error parsing event payload:", err)
 		}
 		if lastReport != newReport {
-			countLabel := ""
-			count := eventGroup[lastReport]
-			if count != 1 {
-				countLabel = "x" + strconv.Itoa(count)
-			}
-			if lastReport != "" {
-				fmt.Println("-", lastReport, countLabel)
-			}
-
+			display(lastReport, eventGroup)
 			lastReport = newReport
 			eventGroup[newReport] = 1
 		} else {
@@ -305,9 +295,7 @@ func displayAll(envs []EventEnvelope) {
 		}
 	}
 	// Keep the last group from evaporating.
-	if lastReport != "" {
-		display(lastReport, eventGroup)
-	}
+	display(lastReport, eventGroup)
 }
 
 func main() {
