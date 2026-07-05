@@ -14,14 +14,14 @@ import (
 type EventEnvelope struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
-	Actor      Actor           `json:"actor"`
+	Actor      User            `json:"actor"`
 	Repo       Repo            `json:"repo"`
 	Public     bool            `json:"public"`
 	CreatedAt  time.Time       `json:"created_at"`
 	RawPayload json.RawMessage `json:"payload"`
 }
 
-type Actor struct {
+type User struct {
 	ID           int    `json:"id"`
 	Login        string `json:"login"`
 	DisplayLogin string `json:"display_login"`
@@ -37,20 +37,11 @@ type Repo struct {
 }
 
 type PushPayload struct {
-	RepositoryID int    `json:"repository_id"`
-	PushID       int    `json:"push_id"`
-	Ref          string `json:"ref"`
-	Head         string `json:"head"`
-	Before       string `json:"before"`
+	// No fields needed so far.
 }
 
 type CreatePayload struct {
-	Ref          string `json:"ref"`
-	RefType      string `json:"ref_type"`
-	FullRef      string `json:"full_ref"`
-	MasterBranch string `json:"master_branch"`
-	Description  string `json:"description"`
-	PusherType   string `json:"pusher_type"`
+	RefType string `json:"ref_type"`
 }
 
 type WatchPayload struct {
@@ -64,11 +55,34 @@ type IssueCommentPayload struct {
 }
 
 type Issue struct {
-	Number int `json:"number"`
+	Number      int `json:"number"`
+	PullRequest PR  `json:"pull_request"`
+}
+
+type PR struct {
+	URL string `json:"html_url"`
 }
 
 type Comment struct {
 	Body string `json:"body"`
+}
+
+type PullRequestPayload struct {
+	Action   string `json:"action"`
+	Number   int    `json:"number"`
+	Assignee User   `json:"assignee,omitempty"`
+	Label    Label  `json:"label,omitempty"`
+}
+
+type Label struct {
+	Name string `json:"name"`
+}
+
+// `strings.Title` is deprecated.
+// `cases` is a whole external module.
+// This will have to do for my current use case.
+func asciiLowerToTitle(s string) string {
+	return string(s[0]+'A'-'a') + s[1:]
 }
 
 func userEventsEndpoint(username string) string {
@@ -86,7 +100,7 @@ func makeRequest(endpoint string) (*http.Request, error) {
 	return req, nil
 }
 
-// Goes from the above-formed request to medium-raw data.
+// Goes from the above-formed request to medium-rare data.
 func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -145,11 +159,63 @@ func makeEventReport(env EventEnvelope) (string, error) {
 		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
 			return "", err
 		}
-		report += fmt.Sprintf("Comment %s on issue #%d in %s:\n\"%s\"",
+		issueType := "issue"
+		// Empty struct here would mean that there was nothing
+		// under the pull_request key, confirming that
+		// the issue in question is, in fact, an issue.
+		if payload.Issue.PullRequest != (PR{}) {
+			issueType = "PR"
+		}
+		report += fmt.Sprintf("Comment %s on %s #%d in %s:\n\"%s\"",
 			payload.Action,
+			issueType,
 			payload.Issue.Number,
 			env.Repo.Name,
 			payload.Comment.Body)
+	case "PullRequestEvent":
+		var payload PullRequestPayload
+		if err := json.Unmarshal(env.RawPayload, &payload); err != nil {
+			return "", err
+		}
+		var toAdd string
+		action := payload.Action
+		switch action {
+		case "opened":
+			fallthrough
+		case "reopened":
+			fallthrough
+		case "closed":
+			fallthrough
+		case "merged":
+			toAdd = fmt.Sprintf("%s PR #%d on %s",
+				asciiLowerToTitle(action),
+				payload.Number,
+				env.Repo.Name)
+		case "assigned":
+			toAdd = fmt.Sprintf("%s %s to PR #%d on %s",
+				asciiLowerToTitle(action),
+				payload.Assignee.DisplayLogin,
+				payload.Number,
+				env.Repo.Name,
+			)
+		case "unassigned":
+			toAdd = fmt.Sprintf("%s %s from PR #%d on %s",
+				asciiLowerToTitle(action),
+				payload.Assignee.DisplayLogin,
+				payload.Number,
+				env.Repo.Name,
+			)
+		case "labeled":
+			fallthrough
+		case "unlabeled":
+			toAdd = fmt.Sprintf("%s PR #%d as '%s' on %s",
+				asciiLowerToTitle(action),
+				payload.Number,
+				payload.Label.Name,
+				env.Repo.Name,
+			)
+		}
+		report += toAdd
 	default:
 		report += fmt.Sprintf("Event type not yet implemented: %s", env.Type)
 	}
