@@ -75,9 +75,7 @@ type IssueCommentPayload struct {
 
 func (p IssueCommentPayload) Format(env EventEnvelope) string {
 	issueType := "issue"
-	// Empty struct here would mean that there was nothing
-	// under the pull_request key, confirming that
-	// the issue in question is, in fact, an issue.
+	// Empty struct here would mean that the issue is, in fact, an issue.
 	if p.Issue.PullRequest != (PR{}) {
 		issueType = "PR"
 	}
@@ -223,13 +221,11 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 		defer resp.Body.Close()
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
-			fmt.Println("Error reading event data:", err)
-			return nil, err
+			return nil, fmt.Errorf("couldn't read event data: %v", err)
 		}
 		var envs []EventEnvelope
 		if err := json.Unmarshal(data, &envs); err != nil {
-			fmt.Println("Error parsing event data:", err)
-			return nil, err
+			return nil, fmt.Errorf("couldn't parse event data: %v", err)
 		}
 		return envs, nil
 	case 404:
@@ -240,9 +236,8 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 	// Caching coming Soon™️
 	// etag := resp.Header.Get("etag")
 	default:
-		return nil, fmt.Errorf("code %d.", resp.StatusCode)
+		return nil, fmt.Errorf("response came back with code %d.", resp.StatusCode)
 	}
-
 }
 
 // Inspects a given event envelope and generates a type-appropriate report.
@@ -272,7 +267,7 @@ func display(rep string, eg EventGroup) {
 	}
 }
 
-func displayAll(envs []EventEnvelope) {
+func displayAll(envs []EventEnvelope) error {
 	var lastReport string
 	eventGroup := make(EventGroup)
 	lastDate := ""
@@ -286,7 +281,7 @@ func displayAll(envs []EventEnvelope) {
 		}
 		newReport, err := makeEventReport(env)
 		if err != nil {
-			fmt.Println("Error parsing event payload:", err)
+			return fmt.Errorf("couldn't parse event payload: %v", err)
 		}
 		if lastReport != newReport {
 			display(lastReport, eventGroup)
@@ -301,6 +296,7 @@ func displayAll(envs []EventEnvelope) {
 	}
 	// Keep the last group from evaporating.
 	display(lastReport, eventGroup)
+	return nil
 }
 
 func main() {
@@ -313,12 +309,12 @@ func main() {
 		endpoint := userEventsEndpoint(user)
 		request, err := makeRequest(endpoint)
 		if err != nil {
-			fmt.Println("Error forming request:", err)
+			fmt.Println("Request construction error:", err)
 			return
 		}
 		envelopes, err := extractEventData(request)
 		if err != nil {
-			fmt.Println("Error extracting data:", err)
+			fmt.Println("Data extraction error:", err)
 			return
 		}
 		// Push latest events to the bottom.
@@ -327,6 +323,8 @@ func main() {
 			func(a, b EventEnvelope) int {
 				return a.CreatedAt.Compare(b.CreatedAt)
 			})
-		displayAll(envelopes)
+		if err := displayAll(envelopes); err != nil {
+			fmt.Println("Display error:", err)
+		}
 	}
 }
