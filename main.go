@@ -56,7 +56,7 @@ type CreatePayload struct {
 }
 
 func (p CreatePayload) Format(env EventEnvelope) string {
-	return fmt.Sprintf("A %s created on %s", p.RefType, env.Repo.Name)
+	return fmt.Sprintf("Created a %s in %s", p.RefType, env.Repo.Name)
 }
 
 type WatchPayload struct {
@@ -117,14 +117,14 @@ func (p PullRequestPayload) Format(env EventEnvelope) string {
 	action := p.Action
 	switch action {
 	case "assigned":
-		return fmt.Sprintf("%s %s to PR #%d on %s",
+		return fmt.Sprintf("%s %s to PR #%d in %s",
 			asciiLowerToTitle(action),
 			p.Assignee.DisplayLogin,
 			p.Number,
 			env.Repo.Name,
 		)
 	case "unassigned":
-		return fmt.Sprintf("%s %s from PR #%d on %s",
+		return fmt.Sprintf("%s %s from PR #%d in %s",
 			asciiLowerToTitle(action),
 			p.Assignee.DisplayLogin,
 			p.Number,
@@ -133,14 +133,14 @@ func (p PullRequestPayload) Format(env EventEnvelope) string {
 	case "labeled":
 		fallthrough
 	case "unlabeled":
-		return fmt.Sprintf("%s PR #%d as '%s' on %s",
+		return fmt.Sprintf("%s PR #%d as '%s' in %s",
 			asciiLowerToTitle(action),
 			p.Number,
 			p.Label.Name,
 			env.Repo.Name,
 		)
 	default:
-		return fmt.Sprintf("%s PR #%d on %s",
+		return fmt.Sprintf("%s PR #%d in %s",
 			asciiLowerToTitle(action),
 			p.Number,
 			env.Repo.Name)
