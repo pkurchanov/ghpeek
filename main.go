@@ -218,29 +218,31 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == 404 {
+	switch resp.StatusCode {
+	case 200:
+		defer resp.Body.Close()
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Error reading event data:", err)
+			return nil, err
+		}
+		var envs []EventEnvelope
+		if err := json.Unmarshal(data, &envs); err != nil {
+			fmt.Println("Error parsing event data:", err)
+			return nil, err
+		}
+		return envs, nil
+	case 404:
 		// We can be reasonably sure that this is what 404 means (see userEventsEndpoint).
 		return nil, errors.New("no user found by the given name.")
-	}
-	if resp.StatusCode == 503 {
+	case 503:
 		return nil, errors.New("service unavailable. Try again in a few minutes.")
-	}
-
 	// Caching coming Soon™️
 	// etag := resp.Header.Get("etag")
+	default:
+		return nil, fmt.Errorf("code %d.", resp.StatusCode)
+	}
 
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Error reading event data:", err)
-		return nil, err
-	}
-	var envs []EventEnvelope
-	if err := json.Unmarshal(data, &envs); err != nil {
-		fmt.Println("Error parsing event data:", err)
-		return nil, err
-	}
-	return envs, nil
 }
 
 // Inspects a given event envelope and generates a type-appropriate report.
