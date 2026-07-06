@@ -80,6 +80,66 @@ func parsePayload(env *Event) error {
 			return err
 		}
 		env.ParsedPayload = p
+	case "CommitCommentEvent":
+		var p CommitCommentPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "DeleteEvent":
+		var p DeletePayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "DiscussionEvent":
+		var p DiscussionPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "ForkEvent":
+		var p ForkPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "GollumEvent":
+		var p GollumPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "MemberEvent":
+		var p MemberPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "PublicEvent":
+		var p PublicPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "PullRequestReviewEvent":
+		var p PullRequestReviewPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "PullRequestReviewCommentEvent":
+		var p PullRequestReviewCommentPayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
+	case "ReleaseEvent":
+		var p ReleasePayload
+		if err := json.Unmarshal(env.RawPayload, &p); err != nil {
+			return err
+		}
+		env.ParsedPayload = p
 	default:
 		env.ParsedPayload = nil
 	}

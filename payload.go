@@ -6,11 +6,15 @@ import (
 )
 
 type PushPayload struct {
-	// No fields needed so far.
+	Ref string `json:"ref"`
 }
 
 func (p PushPayload) Format(env Event) string {
-	return fmt.Sprintf("Pushed to %s", env.Repo.Name)
+	refName := p.Ref
+	if parts := strings.Split(p.Ref, "/"); len(parts) >= 3 {
+		refName = parts[len(parts)-1]
+	}
+	return fmt.Sprintf("Pushed to %s in %s", refName, env.Repo.Name)
 }
 
 type CreatePayload struct {
@@ -59,7 +63,8 @@ type Issue struct {
 }
 
 type PR struct {
-	URL string `json:"html_url"`
+	Number int    `json:"number"`
+	URL    string `json:"html_url"`
 }
 
 type Comment struct {
@@ -150,4 +155,131 @@ func (p IssuesPayload) Format(env Event) string {
 			p.Issue.Number,
 			env.Repo.Name)
 	}
+}
+
+type CommitCommentPayload struct {
+	Action  string  `json:"action"`
+	Comment Comment `json:"comment"`
+}
+
+func (p CommitCommentPayload) Format(env Event) string {
+	return fmt.Sprintf("Commented on a commit in %s:\n%s",
+		env.Repo.Name, quote(p.Comment.Body))
+}
+
+type DeletePayload struct {
+	Ref     string `json:"ref"`
+	RefType string `json:"ref_type"`
+}
+
+func (p DeletePayload) Format(env Event) string {
+	return fmt.Sprintf("Deleted %s %s in %s", p.RefType, p.Ref, env.Repo.Name)
+}
+
+type DiscussionPayload struct {
+	Action     string     `json:"action"`
+	Discussion Discussion `json:"discussion"`
+}
+
+type Discussion struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+}
+
+func (p DiscussionPayload) Format(env Event) string {
+	return fmt.Sprintf("%s discussion #%d: %s in %s",
+		asciiLowerToTitle(p.Action), p.Discussion.Number, p.Discussion.Title, env.Repo.Name)
+}
+
+type ForkPayload struct {
+	Action string     `json:"action"`
+	Forkee Repository `json:"forkee"`
+}
+
+type Repository struct {
+	FullName string `json:"full_name"`
+}
+
+func (p ForkPayload) Format(env Event) string {
+	return fmt.Sprintf("Forked %s to %s", env.Repo.Name, p.Forkee.FullName)
+}
+
+type GollumPayload struct {
+	Pages []WikiPage `json:"pages"`
+}
+
+type WikiPage struct {
+	PageName string `json:"page_name"`
+	Action   string `json:"action"`
+}
+
+func (p GollumPayload) Format(env Event) string {
+	if len(p.Pages) == 0 {
+		return fmt.Sprintf("Updated wiki in %s", env.Repo.Name)
+	}
+	page := p.Pages[0]
+	return fmt.Sprintf("%s wiki page '%s' in %s", asciiLowerToTitle(page.Action), page.PageName, env.Repo.Name)
+}
+
+type MemberPayload struct {
+	Action string `json:"action"`
+	Member User   `json:"member"`
+}
+
+func (p MemberPayload) Format(env Event) string {
+	return fmt.Sprintf("%s %s as a collaborator to %s",
+		asciiLowerToTitle(p.Action), p.Member.DisplayLogin, env.Repo.Name)
+}
+
+type PublicPayload struct {
+}
+
+func (p PublicPayload) Format(env Event) string {
+	return fmt.Sprintf("Made %s public", env.Repo.Name)
+}
+
+type PullRequestReviewPayload struct {
+	Action      string `json:"action"`
+	PullRequest PR     `json:"pull_request"`
+	Review      Review `json:"review"`
+}
+
+type Review struct {
+	Body  string `json:"body"`
+	State string `json:"state"`
+}
+
+func (p PullRequestReviewPayload) Format(env Event) string {
+	return fmt.Sprintf("%s a review on PR #%d in %s:\n%s",
+		asciiLowerToTitle(p.Action), p.PullRequest.Number, env.Repo.Name, quote(p.Review.Body))
+}
+
+type PullRequestReviewCommentPayload struct {
+	Action      string  `json:"action"`
+	PullRequest PR      `json:"pull_request"`
+	Comment     Comment `json:"comment"`
+}
+
+func (p PullRequestReviewCommentPayload) Format(env Event) string {
+	return fmt.Sprintf("%s a review comment on PR #%d in %s:\n%s",
+		asciiLowerToTitle(p.Action), p.PullRequest.Number, env.Repo.Name, quote(p.Comment.Body))
+}
+
+type ReleasePayload struct {
+	Action  string  `json:"action"`
+	Release Release `json:"release"`
+}
+
+type Release struct {
+	TagName string `json:"tag_name"`
+	Name    string `json:"name"`
+}
+
+func (p ReleasePayload) Format(env Event) string {
+	name := p.Release.Name
+	if name == "" {
+		name = p.Release.TagName
+	}
+	return fmt.Sprintf("%s release %s in %s",
+		asciiLowerToTitle(p.Action), name, env.Repo.Name)
 }
