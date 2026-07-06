@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-type EventEnvelope struct {
+type Event struct {
 	ID            string          `json:"id"`
 	Type          string          `json:"type"`
 	Actor         User            `json:"actor"`
@@ -21,11 +21,11 @@ type EventEnvelope struct {
 	Public        bool            `json:"public"`
 	CreatedAt     time.Time       `json:"created_at"`
 	RawPayload    json.RawMessage `json:"payload"`
-	ParsedPayload EventFormatter
+	ParsedPayload Formatter
 }
 
-type EventFormatter interface {
-	Format(env EventEnvelope) string
+type Formatter interface {
+	Format(env Event) string
 }
 
 type User struct {
@@ -47,7 +47,7 @@ type PushPayload struct {
 	// No fields needed so far.
 }
 
-func (p PushPayload) Format(env EventEnvelope) string {
+func (p PushPayload) Format(env Event) string {
 	return fmt.Sprintf("Pushed to %s", env.Repo.Name)
 }
 
@@ -55,7 +55,7 @@ type CreatePayload struct {
 	RefType string `json:"ref_type"`
 }
 
-func (p CreatePayload) Format(env EventEnvelope) string {
+func (p CreatePayload) Format(env Event) string {
 	return fmt.Sprintf("Created a %s in %s", p.RefType, env.Repo.Name)
 }
 
@@ -63,7 +63,7 @@ type WatchPayload struct {
 	Action string `json:"action"`
 }
 
-func (p WatchPayload) Format(env EventEnvelope) string {
+func (p WatchPayload) Format(env Event) string {
 	return fmt.Sprintf("Starred %s", env.Repo.Name)
 }
 
@@ -73,7 +73,7 @@ type IssueCommentPayload struct {
 	Comment Comment `json:"comment"`
 }
 
-func (p IssueCommentPayload) Format(env EventEnvelope) string {
+func (p IssueCommentPayload) Format(env Event) string {
 	issueType := "issue"
 	// Empty struct here would mean that the issue is, in fact, an issue.
 	if p.Issue.PullRequest != (PR{}) {
@@ -111,7 +111,7 @@ type PullRequestPayload struct {
 	Label    Label  `json:"label,omitempty"`
 }
 
-func (p PullRequestPayload) Format(env EventEnvelope) string {
+func (p PullRequestPayload) Format(env Event) string {
 	action := p.Action
 	switch action {
 	case "assigned":
@@ -149,7 +149,7 @@ type Label struct {
 	Name string `json:"name"`
 }
 
-func parsePayload(env *EventEnvelope) error {
+func parsePayload(env *Event) error {
 	switch env.Type {
 	case "PushEvent":
 		var p PushPayload
@@ -194,6 +194,9 @@ type EventGroup map[string]int
 // `cases` is a whole external module.
 // This will have to do for my current use case.
 func asciiLowerToTitle(s string) string {
+	if s == "" {
+		return ""
+	}
 	return string(s[0]+'A'-'a') + s[1:]
 }
 
@@ -211,7 +214,7 @@ func makeRequest(endpoint string) (*http.Request, error) {
 }
 
 // Gets us as far as medium-rare envelopes.
-func extractEventData(req *http.Request) ([]EventEnvelope, error) {
+func extractEventData(req *http.Request) ([]Event, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -223,27 +226,26 @@ func extractEventData(req *http.Request) ([]EventEnvelope, error) {
 		if err != nil {
 			return nil, fmt.Errorf("couldn't read event data: %v", err)
 		}
-		var envs []EventEnvelope
+		var envs []Event
 		if err := json.Unmarshal(data, &envs); err != nil {
 			return nil, fmt.Errorf("couldn't parse event data: %v", err)
 		}
 		return envs, nil
+	case 403:
+		return nil, errors.New("caching coming Soon™️.")
+		// etag := resp.Header.Get("etag")
 	case 404:
 		// We can be reasonably sure that this is what 404 means (see userEventsEndpoint).
 		return nil, errors.New("no user found by the given name.")
 	case 503:
 		return nil, errors.New("service unavailable. Try again in a few minutes.")
-	// Caching coming Soon™️
-	// etag := resp.Header.Get("etag")
 	default:
 		return nil, fmt.Errorf("response came back with code %d.", resp.StatusCode)
 	}
 }
 
 // Inspects a given event envelope and generates a type-appropriate report.
-//
-// In the future it might be nice to have an intermediate consolidation step.
-func makeEventReport(env EventEnvelope) (string, error) {
+func makeEventReport(env Event) (string, error) {
 	if err := parsePayload(&env); err != nil {
 		return "", err
 	}
@@ -256,6 +258,7 @@ func makeEventReport(env EventEnvelope) (string, error) {
 	return report, nil
 }
 
+// Pretty-printer for EventGroup elements.
 func display(rep string, eg EventGroup) {
 	if rep != "" {
 		count := eg[rep]
@@ -267,7 +270,9 @@ func display(rep string, eg EventGroup) {
 	}
 }
 
-func displayAll(envs []EventEnvelope) error {
+// The final pretty-printer.
+// "Pretty" as in "pretty coupled with payload parsing".
+func displayAll(envs []Event) error {
 	var lastReport string
 	eventGroup := make(EventGroup)
 	lastDate := ""
@@ -323,7 +328,7 @@ func main() {
 	// Push latest events to the bottom.
 	slices.SortFunc(
 		envelopes,
-		func(a, b EventEnvelope) int {
+		func(a, b Event) int {
 			return a.CreatedAt.Compare(b.CreatedAt)
 		})
 	if err := displayAll(envelopes); err != nil {
