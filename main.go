@@ -273,9 +273,11 @@ func displayAll(envs []EventEnvelope) error {
 	lastDate := ""
 	for _, env := range envs {
 		newDate := env.CreatedAt.Format(time.DateOnly)
-		// Stop groups from migrating across day boundaries.
 		if newDate != lastDate {
+			// Squeeze what's left out of the previous day.
 			display(lastReport, eventGroup)
+			lastReport = ""
+
 			fmt.Printf("\n  %s\n", newDate)
 			lastDate = newDate
 		}
