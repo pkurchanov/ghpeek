@@ -11,7 +11,7 @@ type PushPayload struct {
 
 func (p PushPayload) Format(env Event) string {
 	refName := p.Ref
-	if parts := strings.Split(p.Ref, "/"); len(parts) >= 3 {
+	if parts := strings.Split(refName, "/"); len(parts) >= 3 {
 		refName = parts[len(parts)-1]
 	}
 	return fmt.Sprintf("Pushed to %s in %s", refName, env.Repo.Name)
@@ -232,6 +232,7 @@ func (p MemberPayload) Format(env Event) string {
 }
 
 type PublicPayload struct {
+	// Haven't needed anything here yet.
 }
 
 func (p PublicPayload) Format(env Event) string {

@@ -146,9 +146,6 @@ func parsePayload(env *Event) error {
 	return nil
 }
 
-// Modeling a contiguous block of events of exactly the same kind.
-type EventGroup map[string]int
-
 // `strings.Title` is deprecated.
 // `cases` is a whole external module.
 // This will have to do for my current use case.
@@ -216,6 +213,9 @@ func makeEventReport(env Event) (string, error) {
 	report = env.ParsedPayload.Format(env)
 	return report, nil
 }
+
+// Modeling a contiguous block of events of exactly the same kind.
+type EventGroup map[string]int
 
 // Pretty-printer for EventGroup elements.
 func display(rep string, eg EventGroup) {
