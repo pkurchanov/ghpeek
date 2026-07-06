@@ -301,30 +301,30 @@ func displayAll(envs []EventEnvelope) error {
 
 func main() {
 	args := os.Args[1:]
+	user := "torvalds"
 	if len(args) != 1 {
-		fmt.Println("Usage: ghpeek <username>")
-		return
+		fmt.Print("Usage: ghpeek <username>\n\nShowing output for 'torvalds'\n")
 	} else {
-		user := args[0]
-		endpoint := userEventsEndpoint(user)
-		request, err := makeRequest(endpoint)
-		if err != nil {
-			fmt.Println("Request construction error:", err)
-			return
-		}
-		envelopes, err := extractEventData(request)
-		if err != nil {
-			fmt.Println("Data extraction error:", err)
-			return
-		}
-		// Push latest events to the bottom.
-		slices.SortFunc(
-			envelopes,
-			func(a, b EventEnvelope) int {
-				return a.CreatedAt.Compare(b.CreatedAt)
-			})
-		if err := displayAll(envelopes); err != nil {
-			fmt.Println("Display error:", err)
-		}
+		user = args[0]
+	}
+	endpoint := userEventsEndpoint(user)
+	request, err := makeRequest(endpoint)
+	if err != nil {
+		fmt.Println("Request construction error:", err)
+		return
+	}
+	envelopes, err := extractEventData(request)
+	if err != nil {
+		fmt.Println("Data extraction error:", err)
+		return
+	}
+	// Push latest events to the bottom.
+	slices.SortFunc(
+		envelopes,
+		func(a, b EventEnvelope) int {
+			return a.CreatedAt.Compare(b.CreatedAt)
+		})
+	if err := displayAll(envelopes); err != nil {
+		fmt.Println("Display error:", err)
 	}
 }
