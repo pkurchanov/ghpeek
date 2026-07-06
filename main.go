@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 type Event struct {
@@ -242,7 +244,7 @@ func displayAll(envs []Event) error {
 			display(lastReport, eventGroup)
 			lastReport = ""
 
-			fmt.Printf("\n  %s\n", newDate)
+			fmt.Printf("\n  %s\n", color.HiMagentaString(newDate))
 			lastDate = newDate
 		}
 		newReport, err := makeEventReport(env)
@@ -269,7 +271,7 @@ func main() {
 	args := os.Args[1:]
 	user := "torvalds"
 	if len(args) != 1 {
-		fmt.Print("Usage: ghpeek <username>\n\nShowing output for 'torvalds'\n")
+		fmt.Print("Usage: ghpeek <username>\n\nShowing activity for torvalds\n")
 	} else {
 		user = args[0]
 	}

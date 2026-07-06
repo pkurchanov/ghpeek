@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/fatih/color"
 )
 
 type PushPayload struct {
@@ -14,7 +16,7 @@ func (p PushPayload) Format(env Event) string {
 	if parts := strings.Split(refName, "/"); len(parts) >= 3 {
 		refName = parts[len(parts)-1]
 	}
-	return fmt.Sprintf("Pushed to %s in %s", refName, env.Repo.Name)
+	return fmt.Sprintf("%s to %s in %s", color.BlueString("Pushed"), refName, env.Repo.Name)
 }
 
 type CreatePayload struct {
@@ -22,7 +24,7 @@ type CreatePayload struct {
 }
 
 func (p CreatePayload) Format(env Event) string {
-	return fmt.Sprintf("Created a %s in %s", p.RefType, env.Repo.Name)
+	return fmt.Sprintf("%s a %s in %s", color.GreenString("Created"), p.RefType, env.Repo.Name)
 }
 
 type WatchPayload struct {
@@ -30,7 +32,7 @@ type WatchPayload struct {
 }
 
 func (p WatchPayload) Format(env Event) string {
-	return fmt.Sprintf("Starred %s", env.Repo.Name)
+	return fmt.Sprintf("%s %s", color.YellowString("Starred"), env.Repo.Name)
 }
 
 type IssueCommentPayload struct {
@@ -46,13 +48,17 @@ func (p IssueCommentPayload) Format(env Event) string {
 		issueType = "PR"
 	}
 	return fmt.Sprintf("%s a comment on %s #%d in %s:\n%s",
-		asciiLowerToTitle(p.Action), issueType, p.Issue.Number, env.Repo.Name, quote(p.Comment.Body))
+		color.CyanString(asciiLowerToTitle(p.Action)), issueType, p.Issue.Number, env.Repo.Name, quote(p.Comment.Body))
 }
 
 func quote(s string) string {
+	s = strings.TrimSpace(s)
+	style := color.New(color.Faint, color.Italic).SprintFunc()
+	prefix := color.New(color.FgHiBlack).Sprint("  │ ")
+
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		lines[i] = "  > " + line
+		lines[i] = prefix + style(line)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -74,23 +80,23 @@ type Comment struct {
 type PullRequestPayload struct {
 	Action   string `json:"action"`
 	Number   int    `json:"number"`
-	Assignee User   `json:"assignee,omitempty"`
-	Label    Label  `json:"label,omitempty"`
+	Assignee User   `json:"assignee"`
+	Label    Label  `json:"label"`
 }
 
 func (p PullRequestPayload) Format(env Event) string {
-	action := p.Action
-	switch action {
+	coloredAction := color.YellowString(asciiLowerToTitle(p.Action))
+	switch p.Action {
 	case "assigned":
 		return fmt.Sprintf("%s %s to PR #%d in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Assignee.DisplayLogin,
 			p.Number,
 			env.Repo.Name,
 		)
 	case "unassigned":
 		return fmt.Sprintf("%s %s from PR #%d in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Assignee.DisplayLogin,
 			p.Number,
 			env.Repo.Name,
@@ -99,14 +105,14 @@ func (p PullRequestPayload) Format(env Event) string {
 		fallthrough
 	case "unlabeled":
 		return fmt.Sprintf("%s PR #%d as '%s' in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Number,
 			p.Label.Name,
 			env.Repo.Name,
 		)
 	default:
 		return fmt.Sprintf("%s PR #%d in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Number,
 			env.Repo.Name)
 	}
@@ -124,18 +130,18 @@ type IssuesPayload struct {
 }
 
 func (p IssuesPayload) Format(env Event) string {
-	action := p.Action
-	switch action {
+	coloredAction := color.YellowString(asciiLowerToTitle(p.Action))
+	switch p.Action {
 	case "assigned":
 		return fmt.Sprintf("%s %s to issue #%d in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Assignee.DisplayLogin,
 			p.Issue.Number,
 			env.Repo.Name,
 		)
 	case "unassigned":
 		return fmt.Sprintf("%s %s from issue #%d in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Assignee.DisplayLogin,
 			p.Issue.Number,
 			env.Repo.Name,
@@ -144,14 +150,14 @@ func (p IssuesPayload) Format(env Event) string {
 		fallthrough
 	case "unlabeled":
 		return fmt.Sprintf("%s issue #%d as '%s' in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Issue.Number,
 			p.Label.Name,
 			env.Repo.Name,
 		)
 	default:
 		return fmt.Sprintf("%s issue #%d in %s",
-			asciiLowerToTitle(action),
+			coloredAction,
 			p.Issue.Number,
 			env.Repo.Name)
 	}
@@ -163,8 +169,8 @@ type CommitCommentPayload struct {
 }
 
 func (p CommitCommentPayload) Format(env Event) string {
-	return fmt.Sprintf("Commented on a commit in %s:\n%s",
-		env.Repo.Name, quote(p.Comment.Body))
+	return fmt.Sprintf("%s on a commit in %s:\n%s",
+		color.CyanString("Commented"), env.Repo.Name, quote(p.Comment.Body))
 }
 
 type DeletePayload struct {
@@ -173,7 +179,7 @@ type DeletePayload struct {
 }
 
 func (p DeletePayload) Format(env Event) string {
-	return fmt.Sprintf("Deleted %s %s in %s", p.RefType, p.Ref, env.Repo.Name)
+	return fmt.Sprintf("%s %s %s in %s", color.RedString("Deleted"), p.RefType, p.Ref, env.Repo.Name)
 }
 
 type DiscussionPayload struct {
@@ -188,7 +194,7 @@ type Discussion struct {
 
 func (p DiscussionPayload) Format(env Event) string {
 	return fmt.Sprintf("%s discussion #%d: %s in %s",
-		asciiLowerToTitle(p.Action), p.Discussion.Number, p.Discussion.Title, env.Repo.Name)
+		color.GreenString(asciiLowerToTitle(p.Action)), p.Discussion.Number, p.Discussion.Title, env.Repo.Name)
 }
 
 type ForkPayload struct {
@@ -201,7 +207,7 @@ type Repository struct {
 }
 
 func (p ForkPayload) Format(env Event) string {
-	return fmt.Sprintf("Forked %s to %s", env.Repo.Name, p.Forkee.FullName)
+	return fmt.Sprintf("%s %s to %s", color.MagentaString("Forked"), env.Repo.Name, p.Forkee.FullName)
 }
 
 type GollumPayload struct {
@@ -215,10 +221,10 @@ type WikiPage struct {
 
 func (p GollumPayload) Format(env Event) string {
 	if len(p.Pages) == 0 {
-		return fmt.Sprintf("Updated wiki in %s", env.Repo.Name)
+		return fmt.Sprintf("%s wiki in %s", color.BlueString("Updated"), env.Repo.Name)
 	}
 	page := p.Pages[0]
-	return fmt.Sprintf("%s wiki page '%s' in %s", asciiLowerToTitle(page.Action), page.PageName, env.Repo.Name)
+	return fmt.Sprintf("%s wiki page '%s' in %s", color.BlueString(asciiLowerToTitle(page.Action)), page.PageName, env.Repo.Name)
 }
 
 type MemberPayload struct {
@@ -228,7 +234,7 @@ type MemberPayload struct {
 
 func (p MemberPayload) Format(env Event) string {
 	return fmt.Sprintf("%s %s as a collaborator to %s",
-		asciiLowerToTitle(p.Action), p.Member.DisplayLogin, env.Repo.Name)
+		color.MagentaString(asciiLowerToTitle(p.Action)), p.Member.DisplayLogin, env.Repo.Name)
 }
 
 type PublicPayload struct {
@@ -236,7 +242,7 @@ type PublicPayload struct {
 }
 
 func (p PublicPayload) Format(env Event) string {
-	return fmt.Sprintf("Made %s public", env.Repo.Name)
+	return fmt.Sprintf("%s %s public", color.CyanString("Made"), env.Repo.Name)
 }
 
 type PullRequestReviewPayload struct {
@@ -252,7 +258,7 @@ type Review struct {
 
 func (p PullRequestReviewPayload) Format(env Event) string {
 	return fmt.Sprintf("%s a review on PR #%d in %s:\n%s",
-		asciiLowerToTitle(p.Action), p.PullRequest.Number, env.Repo.Name, quote(p.Review.Body))
+		color.CyanString(asciiLowerToTitle(p.Action)), p.PullRequest.Number, env.Repo.Name, quote(p.Review.Body))
 }
 
 type PullRequestReviewCommentPayload struct {
@@ -263,7 +269,7 @@ type PullRequestReviewCommentPayload struct {
 
 func (p PullRequestReviewCommentPayload) Format(env Event) string {
 	return fmt.Sprintf("%s a review comment on PR #%d in %s:\n%s",
-		asciiLowerToTitle(p.Action), p.PullRequest.Number, env.Repo.Name, quote(p.Comment.Body))
+		color.CyanString(asciiLowerToTitle(p.Action)), p.PullRequest.Number, env.Repo.Name, quote(p.Comment.Body))
 }
 
 type ReleasePayload struct {
@@ -282,5 +288,5 @@ func (p ReleasePayload) Format(env Event) string {
 		name = p.Release.TagName
 	}
 	return fmt.Sprintf("%s release %s in %s",
-		asciiLowerToTitle(p.Action), name, env.Repo.Name)
+		color.GreenString(asciiLowerToTitle(p.Action)), name, env.Repo.Name)
 }
