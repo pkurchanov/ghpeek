@@ -148,16 +148,6 @@ func parsePayload(env *Event) error {
 	return nil
 }
 
-// `strings.Title` is deprecated.
-// `cases` is a whole external module.
-// This will have to do for my current use case.
-func asciiLowerToTitle(s string) string {
-	if s == "" {
-		return ""
-	}
-	return string(s[0]+'A'-'a') + s[1:]
-}
-
 func userEventsEndpoint(username string) string {
 	return "https://api.github.com/users/" + username + "/events"
 }

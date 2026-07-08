@@ -32,13 +32,24 @@ type WatchPayload struct {
 }
 
 func (p WatchPayload) Format(env Event) string {
-	return fmt.Sprintf("%s %s", color.YellowString("Starred"), env.Repo.Name)
+	starlight := color.New(color.Italic, color.FgYellow)
+	return fmt.Sprintf("%s %s", starlight.Sprint("Starred"), env.Repo.Name)
 }
 
 type IssueCommentPayload struct {
 	Action  string  `json:"action"`
 	Issue   Issue   `json:"issue"`
 	Comment Comment `json:"comment"`
+}
+
+// `strings.Title` is deprecated.
+// `cases` is a whole external module.
+// This will have to do for my current use case.
+func asciiLowerToTitle(s string) string {
+	if s == "" {
+		return ""
+	}
+	return string(s[0]+'A'-'a') + s[1:]
 }
 
 func (p IssueCommentPayload) Format(env Event) string {
