@@ -25,10 +25,6 @@ type Event struct {
 	ParsedPayload Formatter
 }
 
-type Formatter interface {
-	Format(env Event) string
-}
-
 type User struct {
 	ID           int    `json:"id"`
 	Login        string `json:"login"`
@@ -42,6 +38,10 @@ type Repo struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 	URL  string `json:"url"`
+}
+
+type Formatter interface {
+	Format(env Event) string
 }
 
 func parsePayload(env *Event) error {
@@ -174,6 +174,7 @@ func extractEventData(req *http.Request) ([]Event, error) {
 		if err != nil {
 			return nil, fmt.Errorf("couldn't read event data: %v", err)
 		}
+		// etag := resp.Header.Get("etag")
 		var envs []Event
 		if err := json.Unmarshal(data, &envs); err != nil {
 			return nil, fmt.Errorf("couldn't parse event data: %v", err)
@@ -181,7 +182,6 @@ func extractEventData(req *http.Request) ([]Event, error) {
 		return envs, nil
 	case 403:
 		return nil, errors.New("caching coming Soon™️.")
-		// etag := resp.Header.Get("etag")
 	case 404:
 		// We can be reasonably sure that this is what 404 means (see userEventsEndpoint).
 		return nil, errors.New("no user found by the given name.")

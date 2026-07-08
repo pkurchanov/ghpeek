@@ -263,8 +263,7 @@ type PullRequestReviewPayload struct {
 }
 
 type Review struct {
-	Body  string `json:"body"`
-	State string `json:"state"`
+	Body string `json:"body"`
 }
 
 func (p PullRequestReviewPayload) Format(env Event) string {
