@@ -161,7 +161,7 @@ func makeRequest(endpoint string) (*http.Request, error) {
 	return req, nil
 }
 
-// Gets us as far as medium-rare envelopes.
+// Sends the request and decodes the data up to and excluding payloads.
 func extractEventData(req *http.Request) ([]Event, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -206,7 +206,7 @@ func makeEventReport(env Event) (string, error) {
 	return report, nil
 }
 
-// Modeling a contiguous block of events of exactly the same kind.
+// Models a contiguous block of events of the same kind.
 type EventGroup map[string]int
 
 // Pretty-printer for EventGroup elements.
@@ -222,7 +222,6 @@ func display(rep string, eg EventGroup) {
 }
 
 // The final pretty-printer.
-// "Pretty" as in "pretty coupled with payload parsing".
 func displayAll(envs []Event) error {
 	var lastReport string
 	eventGroup := make(EventGroup)

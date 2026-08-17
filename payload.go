@@ -44,7 +44,7 @@ type IssueCommentPayload struct {
 
 // `strings.Title` is deprecated.
 // `cases` is a whole external module.
-// This will have to do for my current use case.
+// This works perfectly well for our use case.
 func asciiLowerToTitle(s string) string {
 	if s == "" {
 		return ""
