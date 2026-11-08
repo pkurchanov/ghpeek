@@ -4,9 +4,9 @@
 
 
 - Support for each event type as documented for [this](https://docs.github.com/en/rest/using-the-rest-api/github-event-types?apiVersion=2026-03-10) version of the GitHub REST API
-- Compact rendering of closely related events
+- Compact rendering of same-type events
 - Unique color coding for each type of action
-- Comments quoted in full
+- PR/issue comments quoted in full
 
 ## Install
 
@@ -25,8 +25,5 @@ A system-appropriate `ghpeek` executable should spawn in your current working di
 ./ghpeek <username>
 
 ```
-If there's such a user on GitHub, magic should happen.
 
-## Rationale
-
-One day I was sick and tired of not being particularly good at any one thing, programming-wise, so I settled on backend development. [This roadmap](https://roadmap.sh/backend) seemed like a nice enough scaffolding to hang my practice on. [This project idea](https://roadmap.sh/projects/github-user-activity) proved a formidable place to actually start.
+If there's such a user on GitHub, an overview of their latest activity should appear.
